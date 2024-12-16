@@ -164,7 +164,7 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     modal_html = f"""
     <div class="modal-overlay">
         <div class="modal-content">
-            <span class="close-button" onclick="window.location.href = window.location.href.split('?')[0]">&times;</span>
+            <span class="close-button" onclick="window.location.reload()">&times;</span>
             <h2>🔍 {match_set_name}</h2>
             <p>Select the best target for each source below:</p>
     """
