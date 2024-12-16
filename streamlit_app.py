@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # ---------------------------
 # Initialize Session State
@@ -87,7 +86,7 @@ st.markdown(
         padding: 20px;
         border-radius: 10px;
         width: 80%;
-        max-width: 900px;
+        max-width: 800px;
         position: relative;
         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     }
@@ -172,66 +171,52 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     # Display the modal HTML
     modal_placeholder.markdown(modal_html, unsafe_allow_html=True)
 
-    # Prepare data for AgGrid
-    grid_data = df.copy()
+    # Interactive Selection: For each source, provide a selectbox to choose the target
+    selection_container = st.container()
+    with selection_container:
+        # Create a form to hold the selections
+        with st.form(key='selection_form'):
+            selections = {}
+            for idx, row in df.iterrows():
+                source = row['Source']
+                target_options = row['Target Options']
+                selected = row['Selected Target']
+                if selected not in target_options:
+                    selected = target_options[0]  # Default to first option if current selection is invalid
+                selection = st.selectbox(
+                    f"{source}",
+                    options=target_options,
+                    index=target_options.index(selected) if selected in target_options else 0,
+                    key=f"select_{idx}"
+                )
+                selections[idx] = selection
 
-    # Extract all unique target options
-    all_target_options = sorted(list({target for sublist in grid_data['Target Options'] for target in sublist}))
+            # Buttons for Save and Cancel
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                save_button = st.form_submit_button(label="💾 Save Selections")
+            with col2:
+                cancel_button = st.form_submit_button(label="❌ Cancel")
 
-    # Configure AgGrid options
-    gb = GridOptionsBuilder.from_dataframe(grid_data)
-    gb.configure_column(
-        "Selected Target",
-        headerName="Select Target",
-        editable=True,
-        cellEditor='agSelectCellEditor',
-        cellEditorParams={'values': all_target_options},
-        cellStyle={'backgroundColor': '#F0F8FF'},
-        width=200
-    )
-    gb.configure_column("Source", editable=False, headerName="Source", cellStyle={'fontWeight': 'bold'})
-    gb.configure_column("Target Options", hide=True)
-    gb.configure_pagination(paginationAutoPageSize=True)
-    gb.configure_side_bar()
-    grid_options = gb.build()
+    # Handle Save Selections
+    if save_button:
+        # Update the DataFrame with selections
+        for idx, selection in selections.items():
+            st.session_state.match_sets[match_set_name].at[idx, 'Selected Target'] = selection
+        st.session_state.show_modal = False
+        st.experimental_rerun()
+        st.success(f"✅ Selections saved for **{match_set_name}**!")
 
-    # Display AgGrid inside the modal
-    grid_response = AgGrid(
-        grid_data,
-        gridOptions=grid_options,
-        update_mode=GridUpdateMode.VALUE_CHANGED,
-        allow_unsafe_jscode=True,
-        height=400,
-        width='100%',
-        theme='streamlit'  # Choose from 'streamlit', 'light', 'dark', etc.
-    )
-
-    # Retrieve the edited data
-    edited_data = grid_response['data']
-    edited_df = pd.DataFrame(edited_data)
+    # Handle Cancel
+    if cancel_button:
+        st.session_state.show_modal = False
+        st.experimental_rerun()
 
     # Append the closing HTML tags for the modal
     modal_placeholder.markdown("""
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    # Buttons for Save and Cancel inside the modal
-    # Use columns to align buttons horizontally
-    save_col, cancel_col = st.columns([1, 1])
-
-    with save_col:
-        if st.button("💾 Save Selections"):
-            # Update the original DataFrame with selections
-            st.session_state.match_sets[match_set_name]['Selected Target'] = edited_df['Selected Target']
-            st.session_state.show_modal = False
-            st.experimental_rerun()
-            st.success(f"✅ Selections saved for **{match_set_name}**!")
-
-    with cancel_col:
-        if st.button("❌ Cancel"):
-            st.session_state.show_modal = False
-            st.experimental_rerun()
 
 # ---------------------------
 # Display Current Selections
