@@ -1,68 +1,115 @@
 import streamlit as st
 import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from typing import List
 
-# Initialize session state
-if 'df' not in st.session_state:
-    # Sample data
-    st.session_state.df = pd.DataFrame({
-        'Source': ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'],
-        'Target': ['Red', 'Yellow', 'Red', 'Brown', 'Purple']
-    })
+# Initialize session state for match sets
+if 'match_sets' not in st.session_state:
+    st.session_state.match_sets = {
+        'Match Set 1': pd.DataFrame({
+            'Source': [f'Source {i}' for i in range(1, 11)],
+            'Target Options': [
+                ['Target A', 'Target B', 'Target C'] for _ in range(10)
+            ],
+            'Selected Target': [''] * 10
+        }),
+        'Match Set 2': pd.DataFrame({
+            'Source': [f'Source {i}' for i in range(11, 21)],
+            'Target Options': [
+                ['Target D', 'Target E', 'Target F'] for _ in range(10)
+            ],
+            'Selected Target': [''] * 10
+        }),
+        # Add more match sets as needed
+    }
 
-# Function to switch a subset of matches
-def switch_matches(indices):
-    # For simplicity, we'll switch the targets within the selected indices
-    selected_targets = st.session_state.df.loc[indices, 'Target'].tolist()
-    reversed_targets = selected_targets[::-1]
-    st.session_state.df.loc[indices, 'Target'] = reversed_targets
+# Custom CSS for better styling
+st.markdown(
+    """
+    <style>
+    .sidebar .sidebar-content {
+        background-color: #f0f2f6;
+    }
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# Function to update a match based on user selection
-def update_match(index, new_target):
-    st.session_state.df.at[index, 'Target'] = new_target
+st.title("🌟 Enhanced Match Management App")
 
-st.title("Match Management App")
+st.sidebar.header("📁 Match Sets")
 
-st.header("Current Matches")
+# Function to display modal (using expander as a workaround)
+def show_modal(match_set_name: str):
+    st.session_state.current_match_set = match_set_name
+    st.session_state.show_modal = True
 
-# Display the DataFrame
-st.dataframe(st.session_state.df)
+# Function to save selections
+def save_selections(match_set_name: str, df: pd.DataFrame):
+    st.session_state.match_sets[match_set_name] = df
+    st.session_state.show_modal = False
+    st.success(f"✅ Selections saved for **{match_set_name}**!")
 
-st.header("Switch Subset of Matches")
+# Display buttons for each match set
+for match_set in st.session_state.match_sets.keys():
+    if st.sidebar.button(match_set):
+        show_modal(match_set)
 
-# Select subset to switch
-with st.form(key='switch_form'):
-    subset = st.multiselect(
-        'Select the matches you want to switch:',
-        options=st.session_state.df.index,
-        format_func=lambda x: f"{st.session_state.df.at[x, 'Source']} → {st.session_state.df.at[x, 'Target']}"
+# If a modal is to be shown
+if 'show_modal' in st.session_state and st.session_state.show_modal:
+    match_set_name = st.session_state.current_match_set
+    df = st.session_state.match_sets[match_set_name].copy()
+
+    st.subheader(f"🔍 {match_set_name}")
+
+    # Prepare data for AgGrid
+    grid_data = df.copy()
+    # Convert list of target options to a string for display
+    grid_data['Target Options'] = grid_data['Target Options'].apply(lambda x: ', '.join(x))
+
+    # Configure AgGrid options
+    gb = GridOptionsBuilder.from_dataframe(grid_data)
+    gb.configure_selection('single')
+    gb.configure_column("Selected Target", editable=True, 
+                        cellEditor='agSelectCellEditor', 
+                        cellEditorParams={'values': [option for sublist in df['Target Options'] for option in sublist]},
+                        headerName="Select Target")
+    gb.configure_column("Target Options", editable=False)
+    gb.configure_column("Source", editable=False)
+    grid_options = gb.build()
+
+    grid_response = AgGrid(
+        grid_data,
+        gridOptions=grid_options,
+        update_mode=GridUpdateMode.FILTERING_CHANGED | GridUpdateMode.SELECTION_CHANGED,
+        allow_unsafe_jscode=True,
+        height=400,
+        width='100%',
     )
-    submit_switch = st.form_submit_button(label='Switch Selected Matches')
 
-if submit_switch and subset:
-    switch_matches(subset)
-    st.success(f"Switched matches for indices: {subset}")
+    # Retrieve the edited data
+    edited_data = grid_response['data']
+    edited_df = pd.DataFrame(edited_data)
 
-st.header("Manual Match Selection")
+    # Button to save changes
+    if st.button("💾 Save Selections"):
+        # Update the original DataFrame with selections
+        st.session_state.match_sets[match_set_name]['Selected Target'] = edited_df['Selected Target']
+        save_selections(match_set_name, st.session_state.match_sets[match_set_name])
 
-# Display each row with a dropdown for manual matching
-for idx in st.session_state.df.index:
-    source = st.session_state.df.at[idx, 'Source']
-    current_target = st.session_state.df.at[idx, 'Target']
-    
-    # Assume targets are unique for selection; adjust as needed
-    possible_targets = st.session_state.df['Target'].unique().tolist()
-    
-    new_target = st.selectbox(
-        f"Select target for '{source}':",
-        options=possible_targets,
-        index=possible_targets.index(current_target) if current_target in possible_targets else 0,
-        key=f"select_{idx}"
-    )
-    
-    if new_target != current_target:
-        update_match(idx, new_target)
-        st.success(f"Updated '{source}' to match with '{new_target}'")
+    # Button to cancel
+    if st.button("❌ Cancel"):
+        st.session_state.show_modal = False
 
-st.header("Updated Matches")
+# Display current selections
+st.header("📊 Current Selections")
 
-st.dataframe(st.session_state.df)
+for match_set, df in st.session_state.match_sets.items():
+    st.subheader(match_set)
+    display_df = df[['Source', 'Selected Target']].copy()
+    display_df['Selected Target'] = display_df['Selected Target'].replace('', 'Not Selected')
+    st.table(display_df)
