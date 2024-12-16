@@ -123,6 +123,13 @@ st.markdown(
     .modal-button.cancel {
         background-color: #f44336;
     }
+
+    /* Responsive Design */
+    @media (max-width: 600px) {
+        .modal-content {
+            width: 95%;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -160,21 +167,17 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     match_set_name = st.session_state.current_match_set
     df = st.session_state.match_sets[match_set_name].copy()
 
-    # Modal HTML Structure
-    modal_html = f"""
-    <div class="modal-overlay">
-        <div class="modal-content">
-            <span class="close-button" onclick="window.location.reload()">&times;</span>
-            <h2>🔍 {match_set_name}</h2>
-            <p>Select the best target for each source below:</p>
-    """
-    # Display the modal HTML
-    modal_placeholder.markdown(modal_html, unsafe_allow_html=True)
+    # Render the modal
+    with modal_placeholder.container():
+        st.markdown("""
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <span class="close-button" onclick="window.location.reload()">&times;</span>
+                <h2>🔍 {}</h2>
+                <p>Select the best target for each source below:</p>
+        """.format(match_set_name), unsafe_allow_html=True)
 
-    # Interactive Selection: For each source, provide a selectbox to choose the target
-    selection_container = st.container()
-    with selection_container:
-        # Create a form to hold the selections
+        # Interactive Selection: For each source, provide a selectbox to choose the target
         with st.form(key='selection_form'):
             selections = {}
             for idx, row in df.iterrows():
@@ -194,29 +197,29 @@ if st.session_state.show_modal and st.session_state.current_match_set:
             # Buttons for Save and Cancel
             col1, col2 = st.columns([1, 1])
             with col1:
-                save_button = st.form_submit_button(label="💾 Save Selections")
+                save_button = st.form_submit_button(label="💾 Save Selections", on_click=None)
             with col2:
-                cancel_button = st.form_submit_button(label="❌ Cancel")
+                cancel_button = st.form_submit_button(label="❌ Cancel", on_click=None)
 
-    # Handle Save Selections
-    if save_button:
-        # Update the DataFrame with selections
-        for idx, selection in selections.items():
-            st.session_state.match_sets[match_set_name].at[idx, 'Selected Target'] = selection
-        st.session_state.show_modal = False
-        st.experimental_rerun()
-        st.success(f"✅ Selections saved for **{match_set_name}**!")
+        # Handle Save Selections
+        if save_button:
+            # Update the DataFrame with selections
+            for idx, selection in selections.items():
+                st.session_state.match_sets[match_set_name].at[idx, 'Selected Target'] = selection
+            st.session_state.show_modal = False
+            st.experimental_rerun()
+            st.success(f"✅ Selections saved for **{match_set_name}**!")
 
-    # Handle Cancel
-    if cancel_button:
-        st.session_state.show_modal = False
-        st.experimental_rerun()
+        # Handle Cancel
+        if cancel_button:
+            st.session_state.show_modal = False
+            st.experimental_rerun()
 
-    # Append the closing HTML tags for the modal
-    modal_placeholder.markdown("""
+        # Append the closing HTML tags for the modal
+        st.markdown("""
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 # ---------------------------
 # Display Current Selections
@@ -228,4 +231,11 @@ for match_set, df in st.session_state.match_sets.items():
     st.subheader(match_set)
     display_df = df[['Source', 'Selected Target']].copy()
     display_df['Selected Target'] = display_df['Selected Target'].replace('', 'Not Selected')
-    st.table(display_df)
+    
+    # Apply styling to the 'Selected Target' column
+    def color_selected_target(val):
+        color = '#d4edda' if val != 'Not Selected' else '#f8d7da'
+        return f'background-color: {color}'
+
+    styled_display_df = display_df.style.applymap(color_selected_target, subset=['Selected Target'])
+    st.table(styled_display_df)
