@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from typing import List
 
 # ---------------------------
 # Initialize Session State
@@ -68,7 +67,7 @@ st.markdown(
         border-radius: 12px;
     }
 
-    /* Modal Background */
+    /* Modal Overlay */
     .modal-overlay {
         position: fixed;
         top: 0;
@@ -88,8 +87,9 @@ st.markdown(
         padding: 20px;
         border-radius: 10px;
         width: 80%;
-        max-width: 800px;
+        max-width: 900px;
         position: relative;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     }
 
     /* Close Button */
@@ -107,6 +107,22 @@ st.markdown(
     .close-button:focus {
         color: black;
         text-decoration: none;
+    }
+
+    /* Button Styling Inside Modal */
+    .modal-button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        margin: 10px 5px 0 0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .modal-button.cancel {
+        background-color: #f44336;
     }
     </style>
     """,
@@ -138,6 +154,9 @@ for match_set in st.session_state.match_sets.keys():
 # Modal Implementation
 # ---------------------------
 
+# Placeholder for the modal
+modal_placeholder = st.empty()
+
 if st.session_state.show_modal and st.session_state.current_match_set:
     match_set_name = st.session_state.current_match_set
     df = st.session_state.match_sets[match_set_name].copy()
@@ -146,14 +165,12 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     modal_html = f"""
     <div class="modal-overlay">
         <div class="modal-content">
-            <span class="close-button" onclick="window.location.reload()">&times;</span>
+            <span class="close-button" onclick="window.location.href = window.location.href.split('?')[0]">&times;</span>
             <h2>🔍 {match_set_name}</h2>
             <p>Select the best target for each source below:</p>
-            <div id="ag-grid-container"></div>
-        </div>
-    </div>
     """
-    st.markdown(modal_html, unsafe_allow_html=True)
+    # Display the modal HTML
+    modal_placeholder.markdown(modal_html, unsafe_allow_html=True)
 
     # Prepare data for AgGrid
     grid_data = df.copy()
@@ -178,7 +195,7 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     gb.configure_side_bar()
     grid_options = gb.build()
 
-    # Display AgGrid
+    # Display AgGrid inside the modal
     grid_response = AgGrid(
         grid_data,
         gridOptions=grid_options,
@@ -193,17 +210,25 @@ if st.session_state.show_modal and st.session_state.current_match_set:
     edited_data = grid_response['data']
     edited_df = pd.DataFrame(edited_data)
 
-    # Save and Cancel Buttons
-    col1, col2 = st.columns([1, 1])
+    # Append the closing HTML tags for the modal
+    modal_placeholder.markdown("""
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with col1:
+    # Buttons for Save and Cancel inside the modal
+    # Use columns to align buttons horizontally
+    save_col, cancel_col = st.columns([1, 1])
+
+    with save_col:
         if st.button("💾 Save Selections"):
             # Update the original DataFrame with selections
             st.session_state.match_sets[match_set_name]['Selected Target'] = edited_df['Selected Target']
             st.session_state.show_modal = False
+            st.experimental_rerun()
             st.success(f"✅ Selections saved for **{match_set_name}**!")
 
-    with col2:
+    with cancel_col:
         if st.button("❌ Cancel"):
             st.session_state.show_modal = False
             st.experimental_rerun()
