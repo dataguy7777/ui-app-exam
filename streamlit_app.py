@@ -3,7 +3,11 @@ import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from typing import List
 
-# Initialize session state for match sets
+# ---------------------------
+# Initialize Session State
+# ---------------------------
+
+# Initialize match sets if not already present
 if 'match_sets' not in st.session_state:
     st.session_state.match_sets = {
         'Match Set 1': pd.DataFrame({
@@ -23,14 +27,17 @@ if 'match_sets' not in st.session_state:
         # Add more match sets as needed
     }
 
-# Initialize modal visibility
+# Initialize modal visibility and current match set
 if 'show_modal' not in st.session_state:
     st.session_state.show_modal = False
 
 if 'current_match_set' not in st.session_state:
     st.session_state.current_match_set = None
 
-# Custom CSS for better styling
+# ---------------------------
+# Custom CSS for Styling
+# ---------------------------
+
 st.markdown(
     """
     <style>
@@ -61,34 +68,38 @@ st.markdown(
         border-radius: 12px;
     }
 
-    /* Modal Styling */
-    .modal {
-        display: block; /* Hidden by default */
+    /* Modal Background */
+    .modal-overlay {
         position: fixed;
-        z-index: 999;
-        padding-top: 100px;
-        left: 0;
         top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
-        overflow: auto;
-        background-color: rgba(0,0,0,0.4);
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
     }
 
+    /* Modal Content */
     .modal-content {
         background-color: #fefefe;
-        margin: auto;
         padding: 20px;
-        border: 1px solid #888;
-        width: 80%;
         border-radius: 10px;
+        width: 80%;
+        max-width: 800px;
+        position: relative;
     }
 
+    /* Close Button */
     .close-button {
-        color: #aaa;
-        float: right;
-        font-size: 28px;
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        font-size: 30px;
         font-weight: bold;
+        color: #aaa;
         cursor: pointer;
     }
 
@@ -102,65 +113,72 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ---------------------------
+# App Title
+# ---------------------------
+
 st.title("🌟 Enhanced Match Management App")
+
+# ---------------------------
+# Sidebar with Match Set Buttons
+# ---------------------------
 
 st.sidebar.header("📁 Match Sets")
 
-# Function to display modal
 def show_modal(match_set_name: str):
     st.session_state.current_match_set = match_set_name
     st.session_state.show_modal = True
 
-# Display buttons for each match set
+# Display buttons for each match set in the sidebar
 for match_set in st.session_state.match_sets.keys():
     if st.sidebar.button(match_set):
         show_modal(match_set)
 
-# Function to save selections
-def save_selections(match_set_name: str, df: pd.DataFrame):
-    st.session_state.match_sets[match_set_name] = df
-    st.session_state.show_modal = False
-    st.success(f"✅ Selections saved for **{match_set_name}**!")
+# ---------------------------
+# Modal Implementation
+# ---------------------------
 
-# If a modal is to be shown
-if st.session_state.show_modal:
+if st.session_state.show_modal and st.session_state.current_match_set:
     match_set_name = st.session_state.current_match_set
     df = st.session_state.match_sets[match_set_name].copy()
 
-    # Modal HTML structure
+    # Modal HTML Structure
     modal_html = f"""
-    <div class="modal">
-      <div class="modal-content">
-        <span class="close-button" onclick="window.location.href = window.location.href.split('?')[0]">&times;</span>
-        <h2>🔍 {match_set_name}</h2>
-        <div id="ag-grid-container"></div>
-      </div>
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-button" onclick="window.location.reload()">&times;</span>
+            <h2>🔍 {match_set_name}</h2>
+            <p>Select the best target for each source below:</p>
+            <div id="ag-grid-container"></div>
+        </div>
     </div>
     """
     st.markdown(modal_html, unsafe_allow_html=True)
 
-    # Interactive Table within the Modal
-    st.subheader(f"Select the best match for each source in **{match_set_name}**")
-
     # Prepare data for AgGrid
     grid_data = df.copy()
 
-    # Flatten the list of target options for dropdown
+    # Extract all unique target options
     all_target_options = sorted(list({target for sublist in grid_data['Target Options'] for target in sublist}))
 
     # Configure AgGrid options
     gb = GridOptionsBuilder.from_dataframe(grid_data)
-    gb.configure_column("Selected Target", editable=True, 
-                        cellEditor='agSelectCellEditor', 
-                        cellEditorParams={'values': all_target_options},
-                        headerName="Select Target",
-                        width=200)
-    gb.configure_column("Source", editable=False, headerName="Source")
-    gb.configure_column("Target Options", editable=False, headerName="Target Options", hide=True)
+    gb.configure_column(
+        "Selected Target",
+        headerName="Select Target",
+        editable=True,
+        cellEditor='agSelectCellEditor',
+        cellEditorParams={'values': all_target_options},
+        cellStyle={'backgroundColor': '#F0F8FF'},
+        width=200
+    )
+    gb.configure_column("Source", editable=False, headerName="Source", cellStyle={'fontWeight': 'bold'})
+    gb.configure_column("Target Options", hide=True)
     gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_side_bar()
     grid_options = gb.build()
 
+    # Display AgGrid
     grid_response = AgGrid(
         grid_data,
         gridOptions=grid_options,
@@ -168,24 +186,32 @@ if st.session_state.show_modal:
         allow_unsafe_jscode=True,
         height=400,
         width='100%',
-        theme='streamlit'  # You can choose other themes like 'light', 'dark', etc.
+        theme='streamlit'  # Choose from 'streamlit', 'light', 'dark', etc.
     )
 
     # Retrieve the edited data
     edited_data = grid_response['data']
     edited_df = pd.DataFrame(edited_data)
 
-    # Button to save changes
-    if st.button("💾 Save Selections"):
-        # Update the original DataFrame with selections
-        st.session_state.match_sets[match_set_name]['Selected Target'] = edited_df['Selected Target']
-        save_selections(match_set_name, st.session_state.match_sets[match_set_name])
+    # Save and Cancel Buttons
+    col1, col2 = st.columns([1, 1])
 
-    # Button to cancel (close modal without saving)
-    if st.button("❌ Cancel"):
-        st.session_state.show_modal = False
+    with col1:
+        if st.button("💾 Save Selections"):
+            # Update the original DataFrame with selections
+            st.session_state.match_sets[match_set_name]['Selected Target'] = edited_df['Selected Target']
+            st.session_state.show_modal = False
+            st.success(f"✅ Selections saved for **{match_set_name}**!")
 
-# Display current selections
+    with col2:
+        if st.button("❌ Cancel"):
+            st.session_state.show_modal = False
+            st.experimental_rerun()
+
+# ---------------------------
+# Display Current Selections
+# ---------------------------
+
 st.header("📊 Current Selections")
 
 for match_set, df in st.session_state.match_sets.items():
